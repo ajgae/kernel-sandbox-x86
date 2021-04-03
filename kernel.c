@@ -36,8 +36,8 @@ enum vga_color {
 
 // pointer to the memory-mapped VGA buffer
 volatile uint16_t* vga_buffer = (volatile uint16_t*) 0xb8000; 
-// pointer to the statically-allocated terminal backbuffer
-static uint16_t term_backbuffer[VGA_HEIGHT*VGA_WIDTH] = {0};
+// pointer to the (for now) statically-allocated terminal backbuffer
+static uint16_t term_backbuffer[VGA_HEIGHT*VGA_WIDTH];
 
 static inline uint8_t vga_entry_color(enum vga_color const fg, enum vga_color const bg) {
     return fg | bg << 4;
@@ -56,7 +56,7 @@ static void vga_fill(uint16_t vga_entry) {
     }
 }
 
-size_t str_len(char const *const str) {
+size_t strlen(char const *const str) {
     size_t len = 0;
     while (str[len]) {
         len++;
@@ -66,11 +66,16 @@ size_t str_len(char const *const str) {
 
 /*
  * The `term` struct provides a nicer abstraction for writing to the VGA
- * buffer. TODO make the buffer better
+ * buffer. 
+ *
+ * TODO:
+ * - buffer size has to be a multiple of VGA_WIDTH
+ * - make it clear each row before to it, with an option to not clear,
+ *   sometimes handy (e.g. curses-like behavior)
  *
  * The buffer is circular: when writing to it, if the results of what we write
  * goes beyond the last row, the results are instead written at the start of
- * the buffer, overwriting (TODO: make it clear before writing) whatever was
+ * the buffer, overwriting whatever was
  * there.
  *
  * The buffer's rows map directly to the VGA buffer's rows. That is,
@@ -87,14 +92,14 @@ struct term {
     uint8_t color; // current color
     size_t row_n; // total number of rows in backbuffer
     size_t row_shift; // first row from the backbuffer that is displayed
-    uint16_t *buff; // backbuffer, >= in size to the VGA buffer
+    uint16_t *buff; // backbuffer, >= in size to the VGA buffer, multiple of VGA_WIDTH
 };
 
 void term_init(struct term *term, uint16_t *buff) {
     term->row = 0;
     term->column = 0;
     term->color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-    // FIXME when handling backbuffer larger than VGA buffer
+    // FIXME when we start handling a backbuffer larger than the VGA buffer
     term->row_n = VGA_HEIGHT; 
     term->row_shift = 0;
     term->buff = buff;
@@ -108,9 +113,7 @@ void term_set_color(struct term *term, uint8_t const color) {
 }
 
 void term_put_entry_at(char const c, struct term *term, size_t const x, size_t const y) {
-    size_t const index_y = (term->row_shift + y) % term->row_n;
-    size_t const index_x = VGA_WIDTH + x;
-    size_t const index = index_y + index_x;
+    size_t const index = ((term->row_shift + y) % term->row_n) * VGA_WIDTH + x;
     term->buff[index] = vga_entry(c, term->color);
 }
 
@@ -120,16 +123,16 @@ void term_put_lf(struct term *term) {
         term->row = 0;
     }
     term->column = 0;
-    /* FIXME row_shift is modulo row_n so this conditional doesn't work,
-     * ok for now since the backbuffer is the same height as the VGA buffer
+    /* FIXME when we start handling a backbuffer larger than the VGA buffer
+     * row_shift is modulo row_n so this conditional doesn't work,
     // if we have reached the bottom of the screen, start scrolling
-    if (term->buff->row_shift >= VGA_HEIGHT) {
-        ++term->buff->row_shift;
-        if (term->buff->row_shift >= term->buff->row_n) {
-            term->buff->row_shift = 0;
+    if (term->row_shift >= VGA_HEIGHT) {
+        ++term->row_shift;
+        if (term->row_shift >= term->row_n) {
+            term->row_shift = 0;
         }
     }
-    // */
+    */
 }
 
 void term_put_char(struct term *term, char c) {
@@ -158,26 +161,27 @@ void term_write(struct term *term, char const *const data, size_t const size) {
     }
 }
 
-void term_putstr(struct term *term, char const *const str) {
-    term_write(term, str, str_len(str));
+void term_put_str(struct term *term, char const *const str) {
+    term_write(term, str, strlen(str));
 }
 
-/* TODO when copying from backbuffer to VGA buffer
-void vga_refresh_line(struct term_buff *buff) {
-
-}
-
-void vga_refresh_all(struct term_buff *buff) {
+/*
+ * Copy the contents of the backbuffer to the VGA buffer for display.
+ */
+void vga_refresh_all(struct term *term) {
     for (size_t i = 0; i < VGA_HEIGHT; ++i) {
-
+        for (size_t j = 0; j < VGA_WIDTH; ++j) {
+            size_t vga_index = i * VGA_WIDTH + j;
+            size_t term_index = ((i + term->row_shift) % VGA_HEIGHT) * VGA_WIDTH + j;
+            vga_buffer[vga_index] = term->buff[term_index];
+        }
     }
 }
-*/
 
 void kernel_main(void) {
-    struct term terminal;
-    term_init(&terminal, term_backbuffer);
-    vga_fill(vga_entry(' ', vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK)));
-    term_putstr(&terminal, "Hello, kernel world!\n");
-    vga_buffer[0] = vga_entry('x', vga_entry_color(VGA_COLOR_BLUE, VGA_COLOR_BLACK));
+    struct term term;
+    term_init(&term, term_backbuffer);
+    vga_fill(vga_entry(' ', vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK)));
+    term_put_str(&term, "Hello, kernel world!\n");
+    vga_refresh_all(&term);
 }
