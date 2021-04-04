@@ -2,15 +2,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/*
-#if defined(__linux__)
-#error "You are not using a cross-compiler, you will most certainly run into trouble"
-#endif
-
-#if !defined(__i386__)
-#error "This tutorial needs to be compiled with a ix86-elf compiler"
-#endif
-*/
+#include "printf.h"
 
 #define VGA_WIDTH 80
 #define VGA_HEIGHT 25
@@ -56,6 +48,10 @@ static void vga_fill(uint16_t vga_entry) {
     }
 }
 
+static inline void vga_clear() {
+    vga_fill(vga_entry(' ', vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK)));
+}
+
 size_t strlen(char const *const str) {
     size_t len = 0;
     while (str[len]) {
@@ -69,7 +65,7 @@ size_t strlen(char const *const str) {
  * buffer. 
  *
  * TODO:
- * - buffer size has to be a multiple of VGA_WIDTH
+ * - REMEMBER: buffer size has to be a multiple of VGA_WIDTH
  * - make it clear each row before to it, with an option to not clear,
  *   sometimes handy (e.g. curses-like behavior)
  *
@@ -172,6 +168,7 @@ void vga_refresh_all(struct term *term) {
     for (size_t i = 0; i < VGA_HEIGHT; ++i) {
         for (size_t j = 0; j < VGA_WIDTH; ++j) {
             size_t vga_index = i * VGA_WIDTH + j;
+            // FIXME buffer
             size_t term_index = ((i + term->row_shift) % VGA_HEIGHT) * VGA_WIDTH + j;
             vga_buffer[vga_index] = term->buff[term_index];
         }
@@ -179,9 +176,45 @@ void vga_refresh_all(struct term *term) {
 }
 
 void kernel_main(void) {
+    vga_clear();
     struct term term;
     term_init(&term, term_backbuffer);
-    vga_fill(vga_entry(' ', vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK)));
-    term_put_str(&term, "Hello, kernel world!\n");
+    char buf[256]; // probably filled with garbage values
+    for (size_t i = 0; i < 256; ++i)
+        buf[i] = 0;
+    snprintf(buf, sizeof(buf), "hello, world!\nhope this works");
+    term_put_str(&term, buf);
+    /*
+    term_put_str(&term, "\
+Hello, kernel world! Sure hope this very long line doesn't get yeeted in a bad way! That would be a shame...\n\
+Hello 1;\n\
+Hello 2;\n\
+Hello 3;\n\
+Hello 4;\n\
+Hello 5;\n\
+Hello 6;\n\
+Hello 7;\n\
+Hello 8;\n\
+Hello 9;\n\
+Hello 10;\n\
+Hello 11;\n\
+Hello 12;\n\
+Hello 13;\n\
+Hello 14;\n\
+Hello 15;\n\
+Hello 16;\n\
+Hello 17;\n\
+Hello 18;\n\
+Hello 19;\n\
+Hello 20;\n\
+Hello 21;\n\
+Hello 22;\n\
+Hello 23;\n\
+Hello 24;\n\
+Hello 25;\n\
+Hello 26;\n\
+Hello 27;\n\
+");
+    // */
     vga_refresh_all(&term);
 }
