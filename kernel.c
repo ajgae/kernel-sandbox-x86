@@ -2,6 +2,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "strings.h"
 #include "printf.h"
 
 #define VGA_WIDTH 80
@@ -50,14 +51,6 @@ static void vga_fill(uint16_t vga_entry) {
 
 static inline void vga_clear() {
     vga_fill(vga_entry(' ', vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK)));
-}
-
-size_t strlen(char const *const str) {
-    size_t len = 0;
-    while (str[len]) {
-        len++;
-    }
-    return len;
 }
 
 /*
@@ -182,7 +175,8 @@ void kernel_main(void) {
     char buf[256]; // probably filled with garbage values
     for (size_t i = 0; i < 256; ++i)
         buf[i] = 0;
-    snprintf(buf, sizeof(buf), "hello, world!\nhope this works");
+    snprintf(buf, sizeof(buf), "hello, world!\n\
+123:%%%1%%%2%%%3\n");
     term_put_str(&term, buf);
     /*
     term_put_str(&term, "\
@@ -218,3 +212,4 @@ Hello 27;\n\
     // */
     vga_refresh_all(&term);
 }
+
