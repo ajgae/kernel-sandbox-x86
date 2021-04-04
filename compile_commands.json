@@ -1,0 +1,32 @@
+[
+  { "directory": "/home/adel/repos/c/osdev.org-barebones",
+    "arguments": [
+      "/usr/local/cross/bin/i686-elf-gcc",
+      "-c",
+      "kernel.c",
+      "-o",
+      "kernel.o",
+      "-std=gnu99",
+      "-ffreestanding",
+      "-O2",
+      "-Wall",
+      "-Wextra"
+    ],
+    "file": "/home/adel/repos/c/osdev.org-barebones/kernel.c"
+  },
+  { "directory": "/home/adel/repos/c/osdev.org-barebones",
+    "arguments": [
+      "/usr/local/cross/bin/i686-elf-gcc",
+      "-c",
+      "printf.c",
+      "-o",
+      "printf.o",
+      "-std=gnu99",
+      "-ffreestanding",
+      "-O2",
+      "-Wall",
+      "-Wextra"
+    ],
+    "file": "/home/adel/repos/c/osdev.org-barebones/kernel.c"
+  }
+]
