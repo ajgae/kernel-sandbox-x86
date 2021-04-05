@@ -157,7 +157,7 @@ void term_put_str(struct term *term, char const *const str) {
 /*
  * Copy the contents of the backbuffer to the VGA buffer for display.
  */
-void vga_refresh_all(struct term *term) {
+void vga_refresh_all(struct term const *const term) {
     for (size_t i = 0; i < VGA_HEIGHT; ++i) {
         for (size_t j = 0; j < VGA_WIDTH; ++j) {
             size_t vga_index = i * VGA_WIDTH + j;
@@ -172,11 +172,9 @@ void kernel_main(void) {
     vga_clear();
     struct term term;
     term_init(&term, term_backbuffer);
-    char buf[256]; // probably filled with garbage values
-    for (size_t i = 0; i < 256; ++i)
-        buf[i] = 0;
+    char buf[256] = {0}; // needs to be filled with 0s!!
     snprintf(buf, sizeof(buf), "hello, world!\n\
-123:%%%1%%%2%%%3\n");
+hex value of %d: %x\n", (long)200, (long)200);
     term_put_str(&term, buf);
     /*
     term_put_str(&term, "\
