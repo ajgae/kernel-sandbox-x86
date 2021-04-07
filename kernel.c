@@ -1,4 +1,3 @@
-#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -30,14 +29,14 @@ enum vga_color {
 // pointer to the memory-mapped VGA buffer
 volatile uint16_t* vga_buffer = (volatile uint16_t*) 0xb8000; 
 // pointer to the (for now) statically-allocated terminal backbuffer
-static uint16_t term_backbuffer[VGA_HEIGHT*VGA_WIDTH];
+static uint16_t term_backbuffer[2*VGA_HEIGHT*VGA_WIDTH];
 
 static inline uint8_t vga_entry_color(enum vga_color const fg, enum vga_color const bg) {
     return fg | bg << 4;
 }
 
-static inline uint16_t vga_entry(unsigned char const uc, uint8_t const color) {
-    return (uint16_t) uc | (uint16_t) color << 8;
+static inline uint16_t vga_entry(unsigned char const c, uint8_t const color) {
+    return (uint16_t) c | (uint16_t) color << 8;
 }
 
 static void vga_fill(uint16_t vga_entry) {
@@ -57,42 +56,46 @@ static inline void vga_clear() {
  * The `term` struct provides a nicer abstraction for writing to the VGA
  * buffer. 
  *
- * TODO:
- * - REMEMBER: buffer size has to be a multiple of VGA_WIDTH
- * - make it clear each row before to it, with an option to not clear,
- *   sometimes handy (e.g. curses-like behavior)
- *
- * The buffer is circular: when writing to it, if the results of what we write
- * goes beyond the last row, the results are instead written at the start of
- * the buffer, overwriting whatever was
- * there.
+ * The internal buffer is circular: when writing to it, if the results of
+ * what we write goes beyond the last row, the results are instead written
+ * at the start of the buffer, overwriting whatever was there.
  *
  * The buffer's rows map directly to the VGA buffer's rows. That is,
  * the backbuffer doesn't just contain a stream of characters. Instead, it
  * contains actual VGA screenspace, including e.g. empty space at the end of an
  * LF-terminated line.
  *
- * A subset of the buffer's rows are copied to the VGA buffer on refresh, also
- * wrapping around if we reach the last row of the buffer while copying.
+ * A subset of the buffer's rows, called a "screen", are copied to the VGA
+ * buffer on refresh and are therefore displayed. The start of the screen starts
+ * moving down when the bottom of the screen has been reached, effectively
+ * implementing scrolling.
+ *
+ * IMPORTANT: for now, `column_n` should match the width of the actual VGA
+ * buffer.
  */
 struct term {
-    size_t row; // current row
-    size_t column; // current column
-    uint8_t color; // current color
+    size_t row; // current row (x)
+    size_t column; // current column (y)
     size_t row_n; // total number of rows in backbuffer
-    size_t row_shift; // first row from the backbuffer that is displayed
-    uint16_t *buff; // backbuffer, >= in size to the VGA buffer, multiple of VGA_WIDTH
+    size_t column_n; // total number of columns in backbuffer
+    size_t row_shift; // first row of the current screen (first row that is displayed)
+    size_t row_screen; // current row relative to the current screen
+    size_t row_n_screen; // height of a screen in rows
+    uint8_t color; // current color
+    uint16_t *buff; // backbuffer
 };
 
 void term_init(struct term *term, uint16_t *buff) {
     term->row = 0;
     term->column = 0;
-    term->color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-    // FIXME when we start handling a backbuffer larger than the VGA buffer
-    term->row_n = VGA_HEIGHT; 
+    term->row_n = 2*VGA_HEIGHT; 
+    term->column_n = VGA_WIDTH;
     term->row_shift = 0;
+    term->row_screen = 0;
+    term->row_n_screen = VGA_HEIGHT;
+    term->color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
     term->buff = buff;
-    for (size_t i = 0; i < term->row_n * VGA_WIDTH; ++i) {
+    for (size_t i = 0; i < term->row_n * term->column_n; ++i) {
         term->buff[i] = 0;
     }
 }
@@ -101,46 +104,64 @@ void term_set_color(struct term *term, uint8_t const color) {
     term->color = color;
 }
 
+/*
+ * Write an entry at position (x, y) relative to the current screen.
+ * This will do nothing if the entry is a non-printable ASCII character.
+ * Those should be handled separately by the caller.
+ */
 void term_put_entry_at(char const c, struct term *term, size_t const x, size_t const y) {
-    size_t const index = ((term->row_shift + y) % term->row_n) * VGA_WIDTH + x;
+    // discard non-printable ASCII characters
+    if (c < 32 || c == 127) {
+        return;
+    }
+    size_t const index = ((term->row_shift + y) % term->row_n) * term->column_n + x;
     term->buff[index] = vga_entry(c, term->color);
 }
 
+/*
+ * Write a line feed, force-starting a new row.
+ *
+ * NOTE: a function that would do the equivalent of <C-l> in VT-100
+ * should reset `row_screen` to 0 so that it doesn't grow infinitely
+ *
+ * TODO: 
+ * - option to not clear the row? sometimes handy (e.g. curses-like behavior)
+ */
 void term_put_lf(struct term *term) {
+    // always increase `row` (modulo `row_n`), it is absolute (not relative)
     ++term->row;
-    if (term->row >= VGA_HEIGHT) {
-        term->row = 0;
-    }
+    term->row %= term->row_n;
+    // a new line always starts at column 0
     term->column = 0;
-    /* FIXME when we start handling a backbuffer larger than the VGA buffer
-     * row_shift is modulo row_n so this conditional doesn't work,
-    // if we have reached the bottom of the screen, start scrolling
-    if (term->row_shift >= VGA_HEIGHT) {
-        ++term->row_shift;
-        if (term->row_shift >= term->row_n) {
-            term->row_shift = 0;
-        }
+
+    // clear the new row
+    for (size_t i = 0; i < term->column_n; ++i) {
+        term->buff[term->row * term->column_n + i] = 
+            vga_entry(' ', vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
     }
-    */
+
+    // update screen-relative coordinates
+    if (term->row_screen < term->row_n_screen) {
+        // no need to scroll, just write below
+        ++term->row_screen;
+    } else {
+        // scroll down
+        ++term->row_shift;
+        term->row_shift %= term->row_n;
+    }
 }
 
 void term_put_char(struct term *term, char c) {
     switch (c) { // handle non-print chars
     case '\n': 
         term_put_lf(term);
-        break;
+        return;
     default:
         term_put_entry_at(c, term, term->column, term->row);
         ++term->column;
     }
-    if (term->column >= VGA_WIDTH) {
-        term->column = 0;
-        // FIXME handle scrolling n whatnot, this only works because backbuffer is
-        // the same height as the VGA buffer
-        ++term->row;
-        if (term->row >= VGA_HEIGHT) {
-            term->row = 0;
-        }
+    if (term->column >= term->column_n) {
+        term_put_lf(term);
     }
 }
 
@@ -155,14 +176,16 @@ void term_put_str(struct term *term, char const *const str) {
 }
 
 /*
- * Copy the contents of the backbuffer to the VGA buffer for display.
+ * Copy the contents of the current screen of the backbuffer to the VGA
+ * buffer for display.
  */
 void vga_refresh_all(struct term const *const term) {
-    for (size_t i = 0; i < VGA_HEIGHT; ++i) {
-        for (size_t j = 0; j < VGA_WIDTH; ++j) {
+    for (size_t i = 0; i < term->row_n_screen; ++i) {
+        for (size_t j = 0; j < term->column_n; ++j) {
             size_t vga_index = i * VGA_WIDTH + j;
-            // FIXME buffer
-            size_t term_index = ((i + term->row_shift) % VGA_HEIGHT) * VGA_WIDTH + j;
+            size_t term_index = 
+                ((i + term->row_shift) % term->row_n)
+                * term->column_n + j;
             vga_buffer[vga_index] = term->buff[term_index];
         }
     }
@@ -173,41 +196,25 @@ void kernel_main(void) {
     struct term term;
     term_init(&term, term_backbuffer);
     char buf[256] = {0}; // needs to be filled with 0s!!
-    snprintf(buf, sizeof(buf)-1, "hello, world!\n\
-hex value of %d: %x\n", (long)200, (long)200);
-    term_put_str(&term, buf);
     /*
-    term_put_str(&term, "\
-Hello, kernel world! Sure hope this very long line doesn't get yeeted in a bad way! That would be a shame...\n\
-Hello 1;\n\
-Hello 2;\n\
-Hello 3;\n\
-Hello 4;\n\
-Hello 5;\n\
-Hello 6;\n\
-Hello 7;\n\
-Hello 8;\n\
-Hello 9;\n\
-Hello 10;\n\
-Hello 11;\n\
-Hello 12;\n\
-Hello 13;\n\
-Hello 14;\n\
-Hello 15;\n\
-Hello 16;\n\
-Hello 17;\n\
-Hello 18;\n\
-Hello 19;\n\
-Hello 20;\n\
-Hello 21;\n\
-Hello 22;\n\
-Hello 23;\n\
-Hello 24;\n\
-Hello 25;\n\
-Hello 26;\n\
-Hello 27;\n\
-");
+    snprintf(buf, sizeof(buf)-1, "very long string that is probably longer than 80 characters long at least i hope it is");
+    // */
+    /*
+    snprintf(buf, sizeof(buf)-1, "hello, world!\n\
+hex value of %d is %x, which seems to work!\n", 200, 200);
+    // */
+    /*
+    term_put_str(&term, buf);
+    // */
+    for (size_t i = 0; i < 32; ++i) {
+        snprintf(buf, sizeof(buf)-1, "number %d\n", i);
+        term_put_str(&term, buf);
+        for (size_t j = 0; j < sizeof(buf); ++j) {
+            buf[j] = '\0';
+        }
+    }
     // */
     vga_refresh_all(&term);
+    // */
 }
 

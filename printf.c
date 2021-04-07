@@ -75,12 +75,14 @@ void ntoa(char *const buf, size_t *i_buf, size_t cnt, long num, size_t base) {
  * IMPORTANT (FIXME?): make sure to account for the null-terminator when
  * specifying `cnt`, i.e. `cnt` should be at most `sizeof(buf)-1`, not
  * `sizeof(buf)`!
+ *
+ * TODO types??? rn we're just casting all variadic args to long
  */
 void snprintf(char *const buf, size_t cnt, const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
-    size_t i_fmt = 0u; // index in `fmt`
-    size_t i_buf = 0u; // index in `buf`
+    size_t i_fmt = 0; // index in `fmt`
+    size_t i_buf = 0; // index in `buf`
     while(fmt[i_fmt] && i_buf < cnt) {
         if (fmt[i_fmt] != '%') {
             // normal character
@@ -92,7 +94,7 @@ void snprintf(char *const buf, size_t cnt, const char *fmt, ...) {
         ++i_fmt;
         char convspec = fmt[i_fmt];
         switch (convspec) {
-            case '%':
+            case '%': // escaped '%' char, treat normally
             {
                 buf[i_buf] = '%';
                 i_buf++;
@@ -101,9 +103,8 @@ void snprintf(char *const buf, size_t cnt, const char *fmt, ...) {
             case 'x':
             case 'X': 
             case 'd':
-            // FIXME digits are in reverse order! fugg
             {
-                long value = va_arg(ap, long);
+                long value = (long)va_arg(ap, size_t);
                 size_t base;
                 if (convspec == 'x' || convspec == 'X') {
                     base = 16;
@@ -111,14 +112,6 @@ void snprintf(char *const buf, size_t cnt, const char *fmt, ...) {
                     base = 10;
                 }
                 ntoa(buf, &i_buf, cnt, value, base);
-                /*
-                do {
-                    char const digit = (char)(value % base);
-                    buf[i_buf] = digit < 10 ? '0' + digit : 'a' + digit - 10;
-                    i_buf++;
-                    value /= base;
-                } while (value && i_buf < cnt);
-                // */
                 break;
             }
         }
