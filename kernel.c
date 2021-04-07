@@ -80,7 +80,7 @@ struct term {
     size_t column_n; // total number of columns in backbuffer
     size_t row_shift; // first row of the current screen (first row that is displayed)
     size_t row_screen; // current row relative to the current screen
-    size_t row_n_screen; // height of a screen in rows
+    size_t row_screen_n; // height of a screen in rows
     uint8_t color; // current color
     uint16_t *buff; // backbuffer
 };
@@ -92,30 +92,34 @@ void term_init(struct term *term, uint16_t *buff) {
     term->column_n = VGA_WIDTH;
     term->row_shift = 0;
     term->row_screen = 0;
-    term->row_n_screen = VGA_HEIGHT;
+    term->row_screen_n = VGA_HEIGHT;
     term->color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
     term->buff = buff;
+    // make sure the buffer is zero-filled
     for (size_t i = 0; i < term->row_n * term->column_n; ++i) {
         term->buff[i] = 0;
     }
 }
 
+/*
+ * Set the color that the terminal will write characters in.
+ */
 void term_set_color(struct term *term, uint8_t const color) {
     term->color = color;
 }
 
 /*
- * Write an entry at position (x, y) relative to the current screen.
+ * Write a character at position (x, y) relative to the current screen.
  * This will do nothing if the entry is a non-printable ASCII character.
  * Those should be handled separately by the caller.
  */
 void term_put_entry_at(char const c, struct term *term, size_t const x, size_t const y) {
     // discard non-printable ASCII characters
-    if (c < 32 || c == 127) {
-        return;
+    if (c >= 32 && c != 127) {
+        size_t const index = 
+            ((term->row_shift + y) % term->row_n) * term->column_n + x;
+        term->buff[index] = vga_entry(c, term->color);
     }
-    size_t const index = ((term->row_shift + y) % term->row_n) * term->column_n + x;
-    term->buff[index] = vga_entry(c, term->color);
 }
 
 /*
@@ -140,24 +144,27 @@ void term_put_lf(struct term *term) {
             vga_entry(' ', vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
     }
 
-    // update screen-relative coordinates
-    if (term->row_screen < term->row_n_screen) {
+    // update screen-relative position
+    if (term->row_screen < term->row_screen_n) {
         // no need to scroll, just write below
         ++term->row_screen;
     } else {
-        // scroll down
+        // scroll screen down
         ++term->row_shift;
         term->row_shift %= term->row_n;
     }
 }
 
+/*
+ * Write `c` to `term`.
+ */
 void term_put_char(struct term *term, char c) {
     switch (c) { // handle non-print chars
     case '\n': 
         term_put_lf(term);
         return;
     default:
-        term_put_entry_at(c, term, term->column, term->row);
+        term_put_entry_at(c, term, term->column, term->row_screen);
         ++term->column;
     }
     if (term->column >= term->column_n) {
@@ -171,6 +178,9 @@ void term_write(struct term *term, char const *const data, size_t const size) {
     }
 }
 
+/*
+ * Write `str` to `term`.
+ */
 void term_put_str(struct term *term, char const *const str) {
     term_write(term, str, strlen(str));
 }
@@ -180,7 +190,7 @@ void term_put_str(struct term *term, char const *const str) {
  * buffer for display.
  */
 void vga_refresh_all(struct term const *const term) {
-    for (size_t i = 0; i < term->row_n_screen; ++i) {
+    for (size_t i = 0; i < term->row_screen_n; ++i) {
         for (size_t j = 0; j < term->column_n; ++j) {
             size_t vga_index = i * VGA_WIDTH + j;
             size_t term_index = 
@@ -206,7 +216,7 @@ hex value of %d is %x, which seems to work!\n", 200, 200);
     /*
     term_put_str(&term, buf);
     // */
-    for (size_t i = 0; i < 32; ++i) {
+    for (size_t i = 0; i < 128; ++i) {
         snprintf(buf, sizeof(buf)-1, "number %d\n", i);
         term_put_str(&term, buf);
         for (size_t j = 0; j < sizeof(buf); ++j) {
