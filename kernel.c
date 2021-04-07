@@ -173,7 +173,7 @@ void kernel_main(void) {
     struct term term;
     term_init(&term, term_backbuffer);
     char buf[256] = {0}; // needs to be filled with 0s!!
-    snprintf(buf, sizeof(buf), "hello, world!\n\
+    snprintf(buf, sizeof(buf)-1, "hello, world!\n\
 hex value of %d: %x\n", (long)200, (long)200);
     term_put_str(&term, buf);
     /*
