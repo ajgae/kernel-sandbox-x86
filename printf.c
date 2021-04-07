@@ -78,9 +78,7 @@ void ntoa(char *const buf, size_t *i_buf, size_t cnt, long num, size_t base) {
  *
  * TODO types??? rn we're just casting all variadic args to long
  */
-void snprintf(char *const buf, size_t cnt, const char *fmt, ...) {
-    va_list ap;
-    va_start(ap, fmt);
+void vsnprintf(char *const buf, size_t cnt, const char *fmt, va_list ap) {
     size_t i_fmt = 0; // index in `fmt`
     size_t i_buf = 0; // index in `buf`
     while(fmt[i_fmt] && i_buf < cnt) {

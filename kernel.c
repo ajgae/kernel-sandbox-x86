@@ -6,6 +6,7 @@
 
 #define VGA_WIDTH 80
 #define VGA_HEIGHT 25
+#define TERM_PRINTF_BUFFER_SIZE 256
 
 enum vga_color {
     VGA_COLOR_BLACK         = 0,
@@ -201,11 +202,22 @@ void vga_refresh_all(struct term const *const term) {
     }
 }
 
+/*
+ * Print a formatted string to the VGA terminal, cropping the formatted
+ * string to `TERM_PRINTF_BUFFER_SIZE` if it is longer than that.
+ */
+void term_printf(struct term *const term, char const *const fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    char buf[TERM_PRINTF_BUFFER_SIZE] = {0};
+    vsnprintf(buf, sizeof(buf)-1, fmt, ap);
+    term_put_str(term, buf);
+}
+
 void kernel_main(void) {
     vga_clear();
     struct term term;
     term_init(&term, term_backbuffer);
-    char buf[256] = {0}; // needs to be filled with 0s!!
     /*
     snprintf(buf, sizeof(buf)-1, "very long string that is probably longer than 80 characters long at least i hope it is");
     // */
@@ -217,11 +229,7 @@ hex value of %d is %x, which seems to work!\n", 200, 200);
     term_put_str(&term, buf);
     // */
     for (size_t i = 0; i < 128; ++i) {
-        snprintf(buf, sizeof(buf)-1, "number %d\n", i);
-        term_put_str(&term, buf);
-        for (size_t j = 0; j < sizeof(buf); ++j) {
-            buf[j] = '\0';
-        }
+        term_printf(&term, "number %d\n", i);
     }
     // */
     vga_refresh_all(&term);
