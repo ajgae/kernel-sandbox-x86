@@ -146,7 +146,9 @@ void term_put_lf(struct term *term) {
     }
 
     // update screen-relative position
-    if (term->row_screen < term->row_screen_n) {
+    // `row_screen` is an index and therefore should always be strictly smaller than
+    // `row_screen_n`, hence the `-1`
+    if (term->row_screen < term->row_screen_n - 1) {
         // no need to scroll, just write below
         ++term->row_screen;
     } else {
@@ -212,6 +214,7 @@ void term_printf(struct term *const term, char const *const fmt, ...) {
     char buf[TERM_PRINTF_BUFFER_SIZE] = {0};
     vsnprintf(buf, sizeof(buf)-1, fmt, ap);
     term_put_str(term, buf);
+    vga_refresh_all(term);
 }
 
 void kernel_main(void) {
@@ -228,11 +231,10 @@ hex value of %d is %x, which seems to work!\n", 200, 200);
     /*
     term_put_str(&term, buf);
     // */
-    for (size_t i = 0; i < 128; ++i) {
+    for (size_t i = 0; i < 192; ++i) {
         term_printf(&term, "number %d\n", i);
     }
     // */
-    vga_refresh_all(&term);
     // */
 }
 
