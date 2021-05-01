@@ -145,8 +145,8 @@ void term_clear(struct term *term) {
 /*
  * Set the color that the terminal will write characters in.
  */
-void term_set_color(struct term *term, uint8_t const color) {
-    term->color = color;
+void term_set_color(struct term *term, enum vga_color const fg, enum vga_color const bg) {
+    term->color = vga_entry_color(fg, bg);
 }
 
 /*

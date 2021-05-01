@@ -65,6 +65,6 @@ struct term {
 
 void term_init(struct term *term);
 void term_clear(struct term *term);
-void term_set_color(struct term *term, uint8_t const color);
+void term_set_color(struct term *term, enum vga_color const fg, enum vga_color const bg);
 void term_put_char(struct term *term, char c);
 void term_printf(struct term *const term, char const *const fmt, ...);
