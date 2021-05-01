@@ -27,7 +27,7 @@ static inline bool is_hex(char c) {
  * `buf` of size >= to `src`'s size, and that a valid null-terminated
  * string is in `src`, otherwise behaviour is undefined.
  */
-void out_rev(char *const buf, char const *const src) {
+static void out_rev(char *const buf, char const *const src) {
     size_t len = strlen(src);
     for (size_t i = 0; i < len; ++i) {
         buf[i] = src[len - 1 - i];
@@ -42,7 +42,7 @@ void out_rev(char *const buf, char const *const src) {
  * to write to `buf`) while writing the string representation of `num` to
  * `buf`.
  */ 
-void ntoa(char *const buf, size_t *i_buf, size_t cnt, long num, size_t base) {
+static void ntoa(char *const buf, size_t *i_buf, size_t cnt, long num, size_t base) {
     char digits[PRINTF_NTOA_BUFFER_SIZE] = {0};
     char tmp[PRINTF_NTOA_BUFFER_SIZE] = {0};
     size_t i_digits = 0;

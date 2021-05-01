@@ -8,6 +8,7 @@
 
 #define VGA_WIDTH 80
 #define VGA_HEIGHT 25
+#define TERM_BACKBUFF_SIZE 2*VGA_HEIGHT
 #define TERM_PRINTF_BUFFER_SIZE 256
 
 enum vga_color {
@@ -62,23 +63,8 @@ struct term {
     uint16_t *buff; // backbuffer
 };
 
-void vga_fill(uint16_t vga_entry);
-inline uint8_t vga_entry_color(enum vga_color const fg, enum vga_color const bg) {
-    return fg | bg << 4;
-}
-inline uint16_t vga_entry(unsigned char const c, uint8_t const color) {
-    return (uint16_t) c | (uint16_t) color << 8;
-}
-inline void vga_clear() {
-    vga_fill(vga_entry(' ', vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK)));
-}
-
 void term_init(struct term *term);
+void term_clear(struct term *term);
 void term_set_color(struct term *term, uint8_t const color);
-void term_put_entry_at(char const c, struct term *term, size_t const x, size_t const y);
-void term_put_lf(struct term *term);
 void term_put_char(struct term *term, char c);
-void term_write(struct term *term, char const *const data, size_t const size);
-void term_put_str(struct term *term, char const *const str);
-void vga_refresh_all(struct term const *const term);
 void term_printf(struct term *const term, char const *const fmt, ...);
